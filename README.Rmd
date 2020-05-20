@@ -1,0 +1,24 @@
+---
+title: "README"
+author: "Neal Fultz"
+date: "5/20/2020"
+output: html_document
+---
+
+## vp
+
+The vp package converts p-values to video poker hands and overrides the default R output for regression models.
+
+I am giving up on lecturing my clients on p values :(
+
+### Example
+
+```{r}
+vp::toggle_stars_poker()
+summary(lm(extra~group, sleep))
+```
+
+### Notes
+
+Tens are coded as `0`, so a hand of `0000` is four tens, which beats `AAA` but loses to `QQQQ`.
+

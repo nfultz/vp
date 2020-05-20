@@ -1,0 +1,10 @@
+Package: vp
+Type: Package
+Title: P Values as Video Poker Hands
+Version: 1.0
+Date: 2020-05-20
+Author: Neal Fultz
+Maintainer: Neal Fultz <nfultz@gmail.com>
+Description: This converts p values into video poker hands, which have a more intuitive
+    interpretation than stars.
+License: Public Domain
