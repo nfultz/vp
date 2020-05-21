@@ -1,0 +1,175 @@
+\documentclass{article}
+
+
+\title{ViP values for NHSTs and calling shenanigans}
+\author{Neal Fultz \\ neal@njnm.co}
+\date{\today\\v0.1}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+%\VignetteIndexEntry{ViP values and calling shenanigans}
+%\VignetteDepends{vp}
+%\VignetteKeywords{p values}
+%\VignettePackage{vp}
+
+\maketitle
+
+
+\section{Motivating example}
+
+Developing an intuition around null hypothesis testing in general, and p values specifically, is
+difficult.
+
+Imagine you are a cowhand, sitting down to a friendly game of poker at the local saloon after
+a long day of wrangling the herd. 
+
+You don't know the dealer personally, but they've got a badge on, or at least a white hat. 
+
+You ante up.
+
+First hand, the dealer has three queens and wins.
+
+Second hand, the dealer has three kings and wins.
+
+Third hand, the dealer has three aces and wins.
+
+
+At this point, most people might decide that maybe this game is different from normal games (``reject the null hypothesis'').
+Maybe it was literally just luck of the draw (a ``Type 1 error'').
+
+You might go one step further, and conclude the deck is 'hot' (``... in favor of the alternative hypothesis''). If that's
+true, when it's your turn to deal, you'll easily win your money back (``replication''). 
+
+OR
+
+You might suspect the dealer is cheating. You might even flip the table and draw on the dealer 
+("calling shenanigans")\footnote{
+  My favorite example of this cinema trope is 1989's ``Bill \& Ted's Excellent Adventure.'' Party on dude.
+}.
+
+The above scenario is roughly as likely as a study having three significant results at the standard $\alpha = .05$ level, but
+your intuition is probably a bit different. 
+
+Your willingness to call shenanigans is probably very different.
+
+To the extent that this is interesting or useful, I've implemented a small R function of the inverse CDF of poker hands\footnote{Odds taken from video poker https://www.casinocenter.com/video-poker-probability/}. 
+
+This can be used to map the results of any null hypothesis significance test to the poker domain. I call them "ViP values" for "Video Poker."
+
+
+\section{Comparison with s-values and stars}
+
+Here we can plot the different ``poker levels'' against the normal ``significance levels'' reported in typical scientific summary tables.
+
+Greenland's s-values, the equivalent number of flips on a fair coin, are also provided\footnote{Greenland, Sander. "Valid p-values behave exactly as they should: Some misleading criticisms of p-values and their resolution with s-values." The American Statistician 73.sup1 (2019): 106-114.}
+
+<<comp,echo=FALSE,fig=TRUE>>=
+
+
+require(ggplot2)
+require(scales)
+
+
+poker_df <- with(vp:::hands,{
+
+data.frame(
+    what = 'poker',
+    type = sapply(rownames(vp:::hands), function(i) switch(as.character(nchar(i)), 
+                '2' = "Pair J-A",
+                '3' = "Three of a Kind",
+                '4' = "Four of a Kind",
+                i)),
+    bottom = pmax(threshold, 1e-6),
+    top = pmin(cumsum(1/occurs_every), 1-1e-6),
+    stringsAsFactors=FALSE)
+})
+
+stars_df <- data.frame(
+  what = 'stars',
+  type=c("***", "**", "*", ".", " "),
+  top=c(0.001, 0.01, 0.05, 0.1, 1-1e-6),
+  bottom=c(1e-6, 0.001, 0.01, 0.05, 0.1),
+  stringsAsFactors = FALSE
+  )
+
+svalues_df <- data.frame(
+  what= 's-values',
+  type=c(as.character(19:1), " "),
+  top=pmin(2^(-19:0), 1-1e-6),
+  bottom=2^(-20:-1),
+  stringsAsFactors = FALSE
+  )
+
+
+poker_df2 <- aggregate(cbind(top, bottom)~what+type, poker_df, FUN=function(x) {list(range(x))})
+poker_df2$top <- sapply(poker_df2$top, max)
+poker_df2$bottom <- sapply(poker_df2$bottom, min)
+poker_df2 <- poker_df2[order(-poker_df2$bottom),]
+
+
+all_df <- rbind(poker_df2, stars_df, svalues_df)
+all_df$what = as.factor(all_df$what)
+all_df$xmin = as.numeric(all_df$what) - 0.3
+all_df$xmax = as.numeric(all_df$what) + 0.3
+all_df$plot_label <- all_df$type
+
+logit_trans <- trans_new("logit",
+                                 transform = qlogis,
+                                 inverse = plogis)
+
+
+
+
+
+ggplot(all_df) +
+  aes(x=what, xmin=xmin, xmax=xmax, ymin=bottom, ymax=pmin(top, .7), y=(pmin(top, .7)-bottom)/2 + bottom, group=type, fill=type) + 
+  geom_rect(color="black") + 
+  geom_text(aes(label=plot_label)) +
+  scale_x_discrete(name="") +
+  scale_y_continuous(name="p value", trans = logit_trans, breaks = c(.5, .25, .1, .05, .01, .001, .0001, .00001)) +
+  ggtitle("Comparison of significance threshold systems") +
+  scale_fill_discrete() + guides(fill=FALSE)
+@
+
+Coin flips may or may not be more intuitive than poker hands. Fractional coin flips are more difficult to think about, for example. 
+They are certainly more uniformly spaced, though.
+
+The star system has very little detail - categories span many types of hands. My intuition on calling shenanigans is different for four-of-a-kind
+than royal flushes, for example. Big categories could leave lots of room for shenanigans to hide or be camoflauged by actual good results.
+
+\section{ViP in a regression}
+
+Additionally, we provide a function to override the default formatting in R. Extra precision is provided by also 
+further subdividing the types of hands into the ranking cards of the hand. 
+
+Note: Ten is coded as `0', so a `000' is more rare than a `999' but less rare than a `2222'. Face cards are coded
+as JQKA.
+
+
+Here is an example using the built in sleep data set, which compares how long people sleep by the drug they were given: 
+
+<<>>=
+vp::toggle_stars_poker()
+summary(lm(extra~group, sleep))
+@
+
+I can therefore reason that these results are roughly as surprising as a hand with three sevens. It's not stat sig at .05,
+but it's certainly in the same ball park.
+
+By analogy, it was a single card away from a full house or four-of-a-kind; just because it didn't get a star doesn't mean
+we should completely dismiss the finding. 
+
+\section{Recap}
+
+Hopefully ViP values are an amusing alternative to p-values or significance stars. I believe they have two main benefits:
+
+1. More intuitive when detecting shenanigans - poker intuition is alert to rare hands, especially when the sample size
+(``number of rounds'') is small. When people fiddle with reference groups to get more stars in a regression table, it is 
+as obvious as a stacked deck.
+
+2. More forgiving to researchers - Just because you didn't get a star doesn't mean the research is ``bad'' - a three of a kind
+is a decent hand in many circumstances, regardless of whether it is aces or sevens. In a business context, folding on a three
+of a kind is probably a bad play.
+
+
+\end{document}
